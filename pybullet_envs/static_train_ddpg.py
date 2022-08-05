@@ -36,7 +36,7 @@ def make_env(env_id: str, rank: int, seed: int = 0) -> Callable:
 if __name__=='__main__':
      if IS_TRAIN:
           # load env
-          env_id = 'general-v0'
+          env_id = 'static-v0'
           env = SubprocVecEnv([make_env(env_id, i) for i in range(1)])
 
           # env = ReachEnv(is_render=False, is_good_view=False, is_train = True)
@@ -57,7 +57,7 @@ if __name__=='__main__':
           callback = CallbackList([checkpoint_callback, callback_max_episodes])
           n_actions = env.action_space.shape[-1]
           action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1*np.ones(n_actions))
-          model = DDPG("MultiInputPolicy", env, batch_size=128, action_noise=action_noise, verbose=1, tensorboard_log="./static_ddpg_tf_logs/")
+          model = DDPG("MlpPolicy", env, batch_size=128, action_noise=action_noise, verbose=1, tensorboard_log="./static_ddpg_tf_logs/")
           # model = DDPG.load('./ddpg_ckp_logs/reach_?????_steps', env=env)
 
           model.learn(

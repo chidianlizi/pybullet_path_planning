@@ -68,7 +68,7 @@ if __name__=='__main__':
           model.save('./ddpg_reach')
      else:
           # load env
-          env = ReachEnv(is_render=True, is_good_view=False, is_train = IS_TRAIN)
+          env = gym.make('general-v0')
           # load drl model
           model = DDPG.load('./ddpg_ckp_logs/reach_2713600_steps', env=env)
 

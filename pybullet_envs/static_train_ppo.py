@@ -52,7 +52,7 @@ if __name__=='__main__':
                                              name_prefix='reach')
           # Create the callback list
           callback = CallbackList([checkpoint_callback, callback_max_episodes])
-          model = PPO("MultiInputPolicy", env, batch_size=128, verbose=1, tensorboard_log="./static_ppo_tf_logs/")
+          model = PPO("MlpPolicy", env, batch_size=128, verbose=1, tensorboard_log="./static_ppo_tf_logs/")
           # model = PPO.load('./ppo_ckp_logs/reach_?????_steps', env=env)
           model.learn(
                total_timesteps=1e10,

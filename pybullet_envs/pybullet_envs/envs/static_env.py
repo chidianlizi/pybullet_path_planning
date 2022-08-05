@@ -11,7 +11,7 @@ CURRENT_PATH = os.path.abspath(__file__)
 BASE = os.path.dirname(os.path.dirname(CURRENT_PATH)) 
 ROOT = os.path.dirname(BASE) 
 sys.path.insert(0,os.path.dirname(CURRENT_PATH))
-from pybullet_util import go_to_target
+from pybullet_util import go_to_target, getinversePoisition
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
 def quaternion_matrix(quaternion):
@@ -53,7 +53,7 @@ def show_target(position):
                 )
 
 class StaticReachEnv(gym.Env):
-    def __init__(self, is_render=True, is_good_view=False, is_train=True):
+    def __init__(self, is_render=False, is_good_view=False, is_train=True):
         '''
         is_render: start GUI
         is_good_view: slow down the motion to have a better look
@@ -85,18 +85,22 @@ class StaticReachEnv(gym.Env):
         self.action_space = spaces.Box(low=-np.pi, high=np.pi, shape=(6,), dtype=np.float32) # angular velocities
         
         # parameters for spatial infomation
+
         self.home = [0, np.pi/2, -np.pi/6, -2*np.pi/3, -np.pi/6, np.pi/2, 0.0]
+        self.target = None
         self.target_position = None
         self.current_pos = None
         self.current_orn = None
         self.current_joint_position = None
+        self.current_vel = np.zeros((6,))
 
         
         # observation space
         self.state = np.zeros((11,), dtype=np.float32)
         self.observation_space=spaces.Box(low=-5.0, high=5.0, shape=(11,), dtype=np.float32)
         
-
+        # time step
+        self.dt = 0.01
         # step counter
         self.step_counter=0
         # max steps in one episode
@@ -110,6 +114,13 @@ class StaticReachEnv(gym.Env):
         self.effector_link = 7
         self.distance_threshold = 0.04        
         
+    def _set_home(self):
+        home = [0.0, np.random.uniform(5*np.pi/12, 7*np.pi/12),
+                     np.random.uniform(-np.pi/4, -np.pi/12),
+                     np.random.uniform(-3*np.pi/4, -np.pi/2),
+                     np.random.uniform(-np.pi/4, -np.pi/12),
+                     np.random.uniform(5*np.pi/12, 7*np.pi/12),0.0]
+        return home
     def create_visual_box(self, halfExtents):
         visual_id = p.createVisualShape(shapeType=p.GEOM_BOX, halfExtents=halfExtents, rgbaColor=[0.5,0.5,0.5,1])
         return visual_id
@@ -165,41 +176,62 @@ class StaticReachEnv(gym.Env):
        
             
     def set_target(self):
-        region = np.random.randint(0,3)
-        # xoz plane
-        if region == 0:            
-            x_val = False
-            while not x_val:
-                x = np.random.uniform(self.x_low_obs+0.03, self.x_high_obs-0.03)
-                if not (-0.13<x<-0.07 or 0.07<x<0.13):
-                    x_val = True
-            z_val = False
-            while not z_val:
-                z = np.random.uniform(self.z_low_obs+0.03, self.z_high_obs-0.03)
-                if not (0.27<z<0.33 or 0.47<z<0.53):
-                    z_val = True
-            target = [x,0.27,z]
-        # xoy plane
-        if region == 1:
-            x_val = False
-            while not x_val:
-                x = np.random.uniform(self.x_low_obs+0.03, self.x_high_obs-0.03)
-                if not (-0.13<x<-0.07 or 0.07<x<0.13):
-                    x_val = True
-            y = np.random.uniform(0.1, 0.27)
-            z = choice([0.13,0.27,0.33,0.47,0.53,0.67])
-            target = [x,y,z]
-        # yoz plane
-        if region == 2:
-            x = choice([-0.27,-0.13,-0.07,0.07,0.13,0.27])
-            y = np.random.uniform(0.1, 0.27)
-            z_val = False
-            while not z_val:
-                z = np.random.uniform(self.z_low_obs+0.03, self.z_high_obs-0.03)
-                if not (0.27<z<0.33 or 0.47<z<0.53):
-                    z_val = True
-            target = [x,y,z]
-        show_target(target)
+        targets = []
+        for i, x in enumerate([-0.27,-0.13,-0.07,0.07,0.13,0.27]):
+            for j, z in enumerate([0.13,0.27,0.33,0.47,0.53,0.67]):
+                pose = [x, 0.16, z]
+                if i%2 == 0 and j%2 == 0:
+                    orn = [3*np.pi/4, 0, -3*np.pi/4]
+                if i%2 == 0 and j%2 == 1:
+                    orn = [-np.pi/4, -np.pi/4, 0]
+                if i%2 == 1 and j%2 == 0:
+                    orn = [3*np.pi/4, 0, 3*np.pi/4]
+                if i%2 == 1 and j%2 == 1:
+                    orn = [-np.pi/4, np.pi/4, 0]
+                targets.append({'position': pose, 'orientation': orn})
+                    
+        target = choice(targets)
+        # print (target)
+        show_target(target['position'])
+        
+        return target   
+        
+        # region = np.random.randint(0,3)
+        # # xoz plane
+        # if region == 0:            
+        #     x_val = False
+        #     while not x_val:
+        #         x = np.random.uniform(self.x_low_obs+0.03, self.x_high_obs-0.03)
+        #         if not (-0.13<x<-0.07 or 0.07<x<0.13):
+        #             x_val = True
+        #     z_val = False
+        #     while not z_val:
+        #         z = np.random.uniform(self.z_low_obs+0.03, self.z_high_obs-0.03)
+        #         if not (0.27<z<0.33 or 0.47<z<0.53):
+        #             z_val = True
+        #     target = [x,0.27,z]
+        # # xoy plane
+        # if region == 1:
+        #     x_val = False
+        #     while not x_val:
+        #         x = np.random.uniform(self.x_low_obs+0.03, self.x_high_obs-0.03)
+        #         if not (-0.13<x<-0.07 or 0.07<x<0.13):
+        #             x_val = True
+        #     y = np.random.uniform(0.1, 0.27)
+        #     z = choice([0.13,0.27,0.33,0.47,0.53,0.67])
+        #     target = [x,y,z]
+        # # yoz plane
+        # if region == 2:
+        #     x = choice([-0.27,-0.13,-0.07,0.07,0.13,0.27])
+        #     y = np.random.uniform(0.1, 0.27)
+        #     z_val = False
+        #     while not z_val:
+        #         z = np.random.uniform(self.z_low_obs+0.03, self.z_high_obs-0.03)
+        #         if not (0.27<z<0.33 or 0.47<z<0.53):
+        #             z_val = True
+        #     target = [x,y,z]
+        # show_target(target)
+        
         return target
                    
     def reset(self):
@@ -208,7 +240,9 @@ class StaticReachEnv(gym.Env):
         self.obsts = self.build_shelf()
    
         # reset
-        self.target_position = self.set_target()
+        self.target = self.set_target()
+        self.target_position = self.target['position']
+        self.target_orientation = self.target['orientation']
         self.step_counter = 0
         self.collided = False
 
@@ -246,11 +280,12 @@ class StaticReachEnv(gym.Env):
         
         # load the robot arm
         baseorn = p.getQuaternionFromEuler([0,0,0])
-        self.RobotUid = p.loadURDF(self.urdf_root_path, basePosition=[-0.1,-0.12,0.0], baseOrientation=baseorn, useFixedBase=True)
+        self.RobotUid = p.loadURDF(self.urdf_root_path, basePosition=[-0.1,-0.22,-0.1], baseOrientation=baseorn, useFixedBase=True)
         
 
 
         # robot goes to the initial position
+        self.home = self._set_home()
         for i in range(self.base_link, self.effector_link):
             p.resetJointState(bodyUniqueId=self.RobotUid,
                                     jointIndex=i,
@@ -264,7 +299,11 @@ class StaticReachEnv(gym.Env):
 
         for i in range(self.base_link, self.effector_link):
             self.current_joint_position.append(p.getJointState(bodyUniqueId=self.RobotUid, jointIndex=i)[0])
-
+        
+        self.target_joint_position = getinversePoisition(self.RobotUid, self.base_link, 
+                                                         self.effector_link, self.target_position, 
+                                                         self.target_orientation)
+        print(self.target_joint_position)
         # do this step in pybullet
         p.stepSimulation()
         
@@ -276,9 +315,8 @@ class StaticReachEnv(gym.Env):
         # print (action)
         # set a coefficient to prevent the action from being too large
         self.action = action
-        dv = 0.005
         vel = np.zeros((7,))
-        vel[1:] = action * dv
+        vel[1:] = action
         
         # get current pos
         self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
@@ -286,11 +324,13 @@ class StaticReachEnv(gym.Env):
         self.current_joint_position = [0]
         for i in range(self.base_link, self.effector_link):
             self.current_joint_position.append(p.getJointState(bodyUniqueId=self.RobotUid, jointIndex=i)[0])
-        
         # logging.debug("self.current_pos={}\n".format(self.current_pos))
-        
+        diff_position = np.zeros((7,))
+        diff_position[1:] = np.asarray(self.target_joint_position) - np.asarray(self.current_joint_position[1:])
+
         # calculate the new pose
-        new_robots_pos = self.current_joint_position + vel
+        self.current_vel = (np.log(1+self.step_counter)*diff_position+vel)[1:]
+        new_robots_pos = self.current_joint_position+(np.log(1+self.step_counter)*diff_position+vel)*self.dt
 
         for i in range(self.base_link, self.effector_link):
             p.resetJointState(bodyUniqueId=self.RobotUid,
@@ -338,10 +378,9 @@ class StaticReachEnv(gym.Env):
             r2 = 0
         
         # be punished when high speed
-        vel = self.action * 0.005 * 240
-        r3 = - np.linalg.norm(vel)
-        reward = 2000*r1+r2+r3
+        r3 = - np.linalg.norm(self.current_vel)
 
+        reward = 2000*r1+r2+r3
         
         # success
         if self.distance<self.distance_threshold:
@@ -375,7 +414,6 @@ class StaticReachEnv(gym.Env):
         return self.state
     
     
-    
 if __name__ == '__main__':
     
     env = StaticReachEnv(is_render=True, is_good_view=False)
@@ -391,18 +429,25 @@ if __name__ == '__main__':
     
     # p.connect(p.GUI)
     # p.setGravity(0, 0, 0)
+    
     # urdf_root_path = os.path.join(BASE, 'ur5_description/urdf/ur5.urdf')
-    # RobotUid = p.loadURDF(urdf_root_path, basePosition=[-0.1,-0.12,0.0], useFixedBase=True)
+    # RobotUid = p.loadURDF(urdf_root_path, basePosition=[-0.1,-0.22,-0.1], useFixedBase=True)
     # home = [0.0, np.pi/2, -np.pi/2, -np.pi/2, 0.0, np.pi/2, 0.0]
     # for i in range(1,7):
     #     p.resetJointState(bodyUniqueId=RobotUid,
     #                             jointIndex=i,
     #                             targetValue=home[i],
     #                             )
+    # go_to_target(RobotUid, 1,7,[-0.07,0.16,0.13],[3*np.pi/4, 0, -3*np.pi/4])
+    # print(p.getLinkState(RobotUid,7))
     # while True:
-    #     go_to_target(RobotUid, 1,7,[-0.4,0.5,0.2],[])
-    #     print(p.getLinkState(RobotUid,7))
+
     #     p.stepSimulation()
+
+# zuo shang [-np.pi/4, -np.pi/4, 0]
+# you shang [-np.pi/4, np.pi/4, 0]
+# you xia [3*np.pi/4, 0, 3*np.pi/4]
+# zuo xia [3*np.pi/4, 0, -3*np.pi/4]
 
 
     

@@ -62,7 +62,7 @@ class ReachEnv(gym.Env):
         self.is_render=is_render
         self.is_good_view=is_good_view
         self.is_train = is_train
-        
+        self.DISPLAY_BOUNDARY = False
         if self.is_render:
             self.physicsClient = p.connect(p.GUI)
         else:
@@ -78,7 +78,7 @@ class ReachEnv(gym.Env):
         self.y_low_obs= 0
         self.y_high_obs=0.5
         self.z_low_obs=0
-        self.z_high_obs=0.2
+        self.z_high_obs=0.3
 
         # action sapce
         self.action = None
@@ -96,10 +96,10 @@ class ReachEnv(gym.Env):
         
         # observation space
         self.state = np.zeros((11,), dtype=np.float32)
-        self.obs_rays = np.zeros(shape=(289,),dtype=np.float32)
+        self.obs_rays = np.zeros(shape=(577,),dtype=np.float32)
         obs_spaces = {
             'position': spaces.Box(low=-5.0, high=5.0, shape=(11,), dtype=np.float32), # target position, torch position and quaternion
-            'rays': spaces.Box(low=0, high=2, shape=(289,),dtype=np.float32),
+            'rays': spaces.Box(low=0, high=2, shape=(577,),dtype=np.float32),
         } 
         self.observation_space=spaces.Dict(obs_spaces)
         
@@ -139,6 +139,13 @@ class ReachEnv(gym.Env):
         # self.episode_interval = 50
         # self.success_counter = 0
     
+    def _set_home(self):
+        home = [0.0, np.random.uniform(5*np.pi/12, 7*np.pi/12),
+                        np.random.uniform(-np.pi/4, -np.pi/12),
+                        np.random.uniform(-3*np.pi/4, -np.pi/2),
+                        np.random.uniform(-np.pi/4, -np.pi/12),
+                        np.random.uniform(5*np.pi/12, 7*np.pi/12),0.0]
+        return home
     def create_visual_box(self, halfExtents):
         visual_id = p.createVisualShape(shapeType=p.GEOM_BOX, halfExtents=halfExtents, rgbaColor=[0.5,0.5,0.5,1])
         return visual_id
@@ -167,8 +174,8 @@ class ReachEnv(gym.Env):
         obst_z = self.z_high_obs
         obst_id = p.createMultiBody(
                         baseMass=0,
-                        baseVisualShapeIndex=self.create_visual_box([0.18,0.1,0.01]),
-                        baseCollisionShapeIndex=self.create_collision_box([0.18,0.1,0.01]),
+                        baseVisualShapeIndex=self.create_visual_box([0.12,0.1,0.003]),
+                        baseCollisionShapeIndex=self.create_collision_box([0.12,0.1,0.003]),
                         basePosition=[obst_x, obst_y, obst_z]
                     )
         obsts.append(obst_id)
@@ -177,12 +184,12 @@ class ReachEnv(gym.Env):
             val = False
             type = np.random.random()
             rate = np.random.random()
-            if (rate > 0.4) and (type > 0.15):
+            if (rate > 0.33) and (type > 0.15):
                 while not val:
                     rand = np.float32(np.random.rand(3,))
                     obst_x = self.x_high_obs-rand[0]*(self.x_high_obs-self.x_low_obs)
                     obst_y = 0.05+self.y_high_obs-rand[1]*0.8*(self.y_high_obs-self.y_low_obs)
-                    obst_z = self.z_high_obs-(rand[2])*(self.z_high_obs-self.z_low_obs)
+                    obst_z = self.z_low_obs+(rand[2])*0.6*(self.z_high_obs-self.z_low_obs)
                     obst_position = [obst_x, obst_y, obst_z]
                     diff = abs(np.asarray(target_position)-np.asarray(obst_position))
                     val = (diff>0.05).all() and (np.linalg.norm(diff)<0.4)
@@ -196,7 +203,7 @@ class ReachEnv(gym.Env):
                         baseOrientation=choice(obst_orientation)
                     )
                 obsts.append(obst_id)
-            if (rate > 0.4) and (type <= 0.15):
+            if (rate > 0.33) and (type <= 0.15):
                 while not val:
                     rand = np.float32(np.random.rand(3,))
                     obst_x = self.x_high_obs-rand[0]*(self.x_high_obs-self.x_low_obs)
@@ -231,32 +238,33 @@ class ReachEnv(gym.Env):
         p.setGravity(0, 0, 0)
 
         # display boundary
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
+        if self.DISPLAY_BOUNDARY:
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
+                                lineToXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs],
+                                lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs],
+                                lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs],
+                                lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
 
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs],
-                           lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
-        
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs],
+                                lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs],
+                                lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs],
+                                lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs],
+                                lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
+            
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
+                                lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs],
+                                lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
+                                lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs],
+                                lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs])
         
         # load the robot arm
         baseorn = p.getQuaternionFromEuler([0,0,0])
@@ -265,6 +273,7 @@ class ReachEnv(gym.Env):
 
 
         # robot goes to the initial position
+        self.home = self._set_home()
         for i in range(self.base_link, self.effector_link):
             p.resetJointState(bodyUniqueId=self.RobotUid,
                                     jointIndex=i,
@@ -396,7 +405,7 @@ class ReachEnv(gym.Env):
             'rays': self.obs_rays
         }
     
-    def _set_lidar(self, ray_length=2, ray_num_hor=72, render=False):
+    def _set_lidar(self, ray_length=2, ray_num_hor=72, render=True):
         ray_froms = []
         ray_tops = []
         frame = quaternion_matrix(self.current_orn)
@@ -405,7 +414,7 @@ class ReachEnv(gym.Env):
         ray_tops.append(np.matmul(np.asarray(frame),np.array([0.0,0.0,ray_length,1]).T)[0:3].tolist())
 
         # set the angle of rays
-        for angle in range(254, 270, 4):
+        for angle in range(254, 270, 2):
             for i in range(ray_num_hor):
                 z = -ray_length * math.sin(angle*np.pi/180)
                 l = ray_length * math.cos(angle*np.pi/180)
@@ -436,7 +445,7 @@ class ReachEnv(gym.Env):
     
 if __name__ == '__main__':
     
-    env = ReachEnv(is_render=False, is_good_view=False)
+    env = ReachEnv(is_render=True, is_good_view=False)
     episodes = 100
     for episode in range(episodes):
         state = env.reset()
