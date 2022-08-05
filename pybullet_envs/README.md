@@ -1,5 +1,17 @@
-change directory to ./ur5_reproduce/scripts
-directly run "python train_ddpg.py" or "python train_ppo.py"
+- Registering gym environments
+
+'''
+pip install -e .
+'''
+
+- Directly run "
+'''
+python train_ddpg.py
+'''
+or 
+'''
+python train_ppo.py
+'''
 ---------------------------------------------
 Dependency:
 numpy
