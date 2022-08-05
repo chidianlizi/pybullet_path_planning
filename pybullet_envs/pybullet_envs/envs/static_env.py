@@ -383,8 +383,10 @@ class StaticReachEnv(gym.Env):
         reward = 2000*r1+r2+r3
         
         # success
+        is_success = False
         if self.distance<self.distance_threshold:
             self.terminated=True
+            is_success = True
         elif self.step_counter>self.max_steps_one_episode:
             self.terminated=True
         elif self.collided:
@@ -397,7 +399,8 @@ class StaticReachEnv(gym.Env):
               'distance':self.distance,
               'terminated':self.terminated,
               'reward':reward,
-              'collided': self.collided}
+              'collided': self.collided,
+              'is_success': is_success}
         
         if self.terminated: 
             print(info)

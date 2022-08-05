@@ -372,8 +372,10 @@ class ReachEnv(gym.Env):
 
         
         # success
+        is_success = False
         if self.distance<self.distance_threshold:
             self.terminated=True
+            is_success = True
         elif self.step_counter>self.max_steps_one_episode:
             self.terminated=True
         elif self.collided:
@@ -386,7 +388,8 @@ class ReachEnv(gym.Env):
               'distance':self.distance,
               'terminated':self.terminated,
               'reward':reward,
-              'collided': self.collided}
+              'collided': self.collided,
+              'is_success': is_success}
         
         if self.terminated: 
             print(info)
