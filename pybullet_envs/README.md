@@ -1,4 +1,4 @@
-- Registering gym environments
+- Register gym environments
 
 ```
 pip install -e .
