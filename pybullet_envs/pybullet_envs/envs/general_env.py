@@ -6,12 +6,24 @@ import gym
 from gym import spaces
 import time
 import math
+import random
+import string
 from random import choice
+import logging
 CURRENT_PATH = os.path.abspath(__file__)
 BASE = os.path.dirname(os.path.dirname(CURRENT_PATH)) 
 ROOT = os.path.dirname(BASE) 
 sys.path.insert(0,os.path.dirname(CURRENT_PATH))
 from pybullet_util import go_to_target
+
+# LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+# DATE_FORMAT = "%m/%d/%Y %H:%M:%S %p"
+# ran_str = ''.join(random.sample(string.ascii_letters + string.digits, 8))
+# logging.basicConfig(filename='general_env_'+ran_str+'.log', 
+#                     level=logging.DEBUG, 
+#                     format=LOG_FORMAT, 
+#                     datefmt=DATE_FORMAT)
+# logger = logging.getLogger(__name__)
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
 def quaternion_matrix(quaternion):
@@ -225,7 +237,7 @@ class ReachEnv(gym.Env):
                      
     def reset(self):
         p.resetSimulation()
-        print(time.time())
+        # print(time.time())
 
         self.target_position, self.obsts = self.add_obstacles()
         
@@ -356,8 +368,8 @@ class ReachEnv(gym.Env):
         # distance between torch head and target postion
         self.distance = np.linalg.norm(np.asarray(list(self.current_pos))-np.asarray(self.target_position), ord=None)
         # print(self.distance)
-        dd = 0.05
-        if self.distance < 0.5:
+        dd = 0.1
+        if self.distance < dd:
             r1 = -0.5*self.distance*self.distance
         else:
             r1 = -dd*(abs(self.distance)-0.5*dd)
@@ -391,8 +403,9 @@ class ReachEnv(gym.Env):
               'collided': self.collided,
               'is_success': is_success}
         
-        if self.terminated: 
-            print(info)
+        # if self.terminated: 
+            # print(info)
+            # logger.debug(info)
         
         return self._get_obs(),reward,self.terminated,info
     
@@ -408,7 +421,7 @@ class ReachEnv(gym.Env):
             'rays': self.obs_rays
         }
     
-    def _set_lidar(self, ray_length=2, ray_num_hor=72, render=True):
+    def _set_lidar(self, ray_length=2, ray_num_hor=72, render=False):
         ray_froms = []
         ray_tops = []
         frame = quaternion_matrix(self.current_orn)

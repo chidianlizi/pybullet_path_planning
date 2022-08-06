@@ -62,6 +62,7 @@ class StaticReachEnv(gym.Env):
         self.is_render=is_render
         self.is_good_view=is_good_view
         self.is_train = is_train
+        self.DISPLAY_BOUNDARY = False
         
         if self.is_render:
             self.physicsClient = p.connect(p.GUI)
@@ -236,7 +237,7 @@ class StaticReachEnv(gym.Env):
                    
     def reset(self):
         p.resetSimulation()
-        print(time.time())
+        # print(time.time())
         self.obsts = self.build_shelf()
    
         # reset
@@ -251,32 +252,33 @@ class StaticReachEnv(gym.Env):
         p.setGravity(0, 0, 0)
 
         # display boundary
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
+        if self.DISPLAY_BOUNDARY:
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
+                            lineToXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs],
+                            lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs],
+                            lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs],
+                            lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
 
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs],
-                           lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
-        
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs])
-        p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs],
-                           lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs],
+                            lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs],
+                            lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_high_obs],
+                            lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_high_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_high_obs],
+                            lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_high_obs])
+            
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
+                            lineToXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs],
+                            lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_low_obs,self.y_low_obs,self.z_low_obs],
+                            lineToXYZ=[self.x_low_obs,self.y_high_obs,self.z_low_obs])
+            p.addUserDebugLine(lineFromXYZ=[self.x_high_obs,self.y_low_obs,self.z_low_obs],
+                            lineToXYZ=[self.x_high_obs,self.y_high_obs,self.z_low_obs])
         
         # load the robot arm
         baseorn = p.getQuaternionFromEuler([0,0,0])
@@ -303,7 +305,6 @@ class StaticReachEnv(gym.Env):
         self.target_joint_position = getinversePoisition(self.RobotUid, self.base_link, 
                                                          self.effector_link, self.target_position, 
                                                          self.target_orientation)
-        print(self.target_joint_position)
         # do this step in pybullet
         p.stepSimulation()
         
@@ -365,8 +366,8 @@ class StaticReachEnv(gym.Env):
         # distance between torch head and target postion
         self.distance = np.linalg.norm(np.asarray(list(self.current_pos))-np.asarray(self.target_position), ord=None)
         # print(self.distance)
-        dd = 0.05
-        if self.distance < 0.5:
+        dd = 0.1
+        if self.distance < dd:
             r1 = -0.5*self.distance*self.distance
         else:
             r1 = -dd*(abs(self.distance)-0.5*dd)
@@ -402,8 +403,8 @@ class StaticReachEnv(gym.Env):
               'collided': self.collided,
               'is_success': is_success}
         
-        if self.terminated: 
-            print(info)
+        # if self.terminated: 
+        #     print(info)
         
         return self._get_obs(),reward,self.terminated,info
     
