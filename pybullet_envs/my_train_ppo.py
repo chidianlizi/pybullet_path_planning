@@ -37,7 +37,7 @@ if __name__=='__main__':
      if IS_TRAIN:
           # load env
 
-          env_id = 'general-v0'
+          env_id = 'my_general-v0'
           env = SubprocVecEnv([make_env(env_id, i) for i in range(4)])
           # Stops training when the model reaches the maximum number of episodes
           callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=1e10, verbose=1)
@@ -46,25 +46,25 @@ if __name__=='__main__':
           eval_env = SubprocVecEnv([make_env(env_id, i) for i in range(4)])
 
           # Use deterministic actions for evaluation
-          eval_callback = EvalCallback(eval_env, best_model_save_path='./models/best_general/',
-                             log_path='./models/best_general/', eval_freq=10000,
+          eval_callback = EvalCallback(eval_env, best_model_save_path='./models/best_my_general/',
+                             log_path='./models/best_my_general/', eval_freq=10000,
                              deterministic=True, render=False)
           
           # Save a checkpoint every ? steps
-          checkpoint_callback = CheckpointCallback(save_freq=51200, save_path='./models/ppo_ckp_logs/',
-                                             name_prefix='general')
+          checkpoint_callback = CheckpointCallback(save_freq=51200, save_path='./models/my_ppo_ckp_logs/',
+                                             name_prefix='my_general')
           # Create the callback list
           callback = CallbackList([checkpoint_callback, callback_max_episodes, eval_callback])
-          model = PPO("MultiInputPolicy", env, batch_size=128, verbose=1, tensorboard_log="./models/ppo_tf_logs/")
+          model = PPO("MultiInputPolicy", env, batch_size=128, verbose=1, tensorboard_log="./models/my_ppo_tf_logs/")
           # model = PPO.load('./ppo_ckp_logs/reach_?????_steps', env=env)
           model.learn(
                total_timesteps=1e10,
                n_eval_episodes=64,
                callback=callback)
-          model.save('./models/ppo_general')
+          model.save('./models/my_ppo_general')
      else:
           # load env
-          env = gym.make('general-v0')
+          env = gym.make('my_general-v0')
           # load drl model
           model = PPO.load('./ppo_reach', env=env)
 

@@ -45,7 +45,7 @@ if __name__=='__main__':
           # env = ReachEnv(is_render=False, is_good_view=False, is_train = True)
 
           # Stops training when the model reaches the maximum number of episodes
-          callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=50000, verbose=1)
+          callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=1e10, verbose=1)
           # Separate evaluation env
           # eval_env = ReachEnv(is_render=False, is_good_view=False, is_train=False)
 

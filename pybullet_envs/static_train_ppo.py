@@ -39,7 +39,7 @@ if __name__=='__main__':
           env_id = 'static-v0'
           env = SubprocVecEnv([make_env(env_id, i) for i in range(4)])
           # Stops training when the model reaches the maximum number of episodes
-          callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=50000, verbose=1)
+          callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=1e10, verbose=1)
           
           # Separate evaluation env
           eval_env = SubprocVecEnv([make_env(env_id, i) for i in range(4)])

@@ -24,8 +24,92 @@ from pybullet_util import go_to_target
 #                     format=LOG_FORMAT, 
 #                     datefmt=DATE_FORMAT)
 # logger = logging.getLogger(__name__)
+
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
+
+# axis sequences for Euler angles
+_NEXT_AXIS = [1, 2, 0, 1]
+
+# map axes strings to/from tuples of inner axis, parity, repetition, frame
+_AXES2TUPLE = {
+    'sxyz': (0, 0, 0, 0), 'sxyx': (0, 0, 1, 0), 'sxzy': (0, 1, 0, 0),
+    'sxzx': (0, 1, 1, 0), 'syzx': (1, 0, 0, 0), 'syzy': (1, 0, 1, 0),
+    'syxz': (1, 1, 0, 0), 'syxy': (1, 1, 1, 0), 'szxy': (2, 0, 0, 0),
+    'szxz': (2, 0, 1, 0), 'szyx': (2, 1, 0, 0), 'szyz': (2, 1, 1, 0),
+    'rzyx': (0, 0, 0, 1), 'rxyx': (0, 0, 1, 1), 'ryzx': (0, 1, 0, 1),
+    'rxzx': (0, 1, 1, 1), 'rxzy': (1, 0, 0, 1), 'ryzy': (1, 0, 1, 1),
+    'rzxy': (1, 1, 0, 1), 'ryxy': (1, 1, 1, 1), 'ryxz': (2, 0, 0, 1),
+    'rzxz': (2, 0, 1, 1), 'rxyz': (2, 1, 0, 1), 'rzyz': (2, 1, 1, 1)}
+
+_TUPLE2AXES = dict((v, k) for k, v in _AXES2TUPLE.items())
+def euler_from_matrix(matrix, axes='sxyz'):
+    """Return Euler angles from rotation matrix for specified axis sequence.
+
+    axes : One of 24 axis sequences as string or encoded tuple
+
+    Note that many Euler angle triplets can describe one matrix.
+
+    >>> R0 = euler_matrix(1, 2, 3, 'syxz')
+    >>> al, be, ga = euler_from_matrix(R0, 'syxz')
+    >>> R1 = euler_matrix(al, be, ga, 'syxz')
+    >>> numpy.allclose(R0, R1)
+    True
+    >>> angles = (4.0*math.pi) * (numpy.random.random(3) - 0.5)
+    >>> for axes in _AXES2TUPLE.keys():
+    ...    R0 = euler_matrix(axes=axes, *angles)
+    ...    R1 = euler_matrix(axes=axes, *euler_from_matrix(R0, axes))
+    ...    if not numpy.allclose(R0, R1): print axes, "failed"
+
+    """
+    try:
+        firstaxis, parity, repetition, frame = _AXES2TUPLE[axes.lower()]
+    except (AttributeError, KeyError):
+        _ = _TUPLE2AXES[axes]
+        firstaxis, parity, repetition, frame = axes
+
+    i = firstaxis
+    j = _NEXT_AXIS[i+parity]
+    k = _NEXT_AXIS[i-parity+1]
+
+    M = np.array(matrix, dtype=np.float64, copy=False)[:3, :3]
+    if repetition:
+        sy = math.sqrt(M[i, j]*M[i, j] + M[i, k]*M[i, k])
+        if sy > _EPS:
+            ax = math.atan2( M[i, j],  M[i, k])
+            ay = math.atan2( sy,       M[i, i])
+            az = math.atan2( M[j, i], -M[k, i])
+        else:
+            ax = math.atan2(-M[j, k],  M[j, j])
+            ay = math.atan2( sy,       M[i, i])
+            az = 0.0
+    else:
+        cy = math.sqrt(M[i, i]*M[i, i] + M[j, i]*M[j, i])
+        if cy > _EPS:
+            ax = math.atan2( M[k, j],  M[k, k])
+            ay = math.atan2(-M[k, i],  cy)
+            az = math.atan2( M[j, i],  M[i, i])
+        else:
+            ax = math.atan2(-M[j, k],  M[j, j])
+            ay = math.atan2(-M[k, i],  cy)
+            az = 0.0
+
+    if parity:
+        ax, ay, az = -ax, -ay, -az
+    if frame:
+        ax, az = az, ax
+    return ax, ay, az
+
+def euler_from_quaternion(quaternion, axes='sxyz'):
+    """Return Euler angles from quaternion for specified axis sequence.
+
+    >>> angles = euler_from_quaternion([0.06146124, 0, 0, 0.99810947])
+    >>> numpy.allclose(angles, [0.123, 0, 0])
+    True
+
+    """
+    return euler_from_matrix(quaternion_matrix(quaternion), axes)
+
 def quaternion_matrix(quaternion):
     """Return homogeneous rotation matrix from quaternion.
 
@@ -54,8 +138,6 @@ def get_angle(vector_1, vector_2):
     angle_deg = np.rad2deg(angle)
     return angle, angle_deg
 
-
-
 def show_target(position):
     visual_id = p.createVisualShape(shapeType=p.GEOM_SPHERE, radius=0.02, rgbaColor=[1,0,0,1])
     point_id = p.createMultiBody(
@@ -64,7 +146,7 @@ def show_target(position):
                 basePosition=position,
                 )
 
-class ReachEnv(gym.Env):
+class MyReachEnv(gym.Env):
     def __init__(self, is_render=False, is_good_view=False, is_train=True):
         '''
         is_render: start GUI
@@ -107,10 +189,10 @@ class ReachEnv(gym.Env):
         # self.HEIGHT = 128
         
         # observation space
-        self.state = np.zeros((11,), dtype=np.float32)
+        self.state = np.zeros((8,), dtype=np.float32)
         self.obs_rays = np.zeros(shape=(577,),dtype=np.float32)
         obs_spaces = {
-            'position': spaces.Box(low=-5.0, high=5.0, shape=(11,), dtype=np.float32), # target position, torch position and quaternion
+            'position': spaces.Box(low=-2, high=2, shape=(8,), dtype=np.float32),
             'rays': spaces.Box(low=0, high=2, shape=(577,),dtype=np.float32),
         } 
         self.observation_space=spaces.Dict(obs_spaces)
@@ -295,6 +377,7 @@ class ReachEnv(gym.Env):
         # get position observation
         self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
         self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
+
         self.current_joint_position = [0]
         # get lidar observation
         lidar_results = self._set_lidar()
@@ -315,8 +398,24 @@ class ReachEnv(gym.Env):
         # set a coefficient to prevent the action from being too large
         self.action = action
         dv = 0.01
-        vel = np.zeros((7,))
-        vel[1:] = action * dv
+        dx = action[0]*dv
+        dy = action[1]*dv
+        dz = action[2]*dv
+        droll= action[3]*dv
+        dpitch = action[4]*dv
+        dyaw = action[5]*dv
+
+        self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
+        self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
+        current_rpy = euler_from_quaternion(self.current_orn)
+        new_robot_pos=[self.current_pos[0]+dx,
+                            self.current_pos[1]+dy,
+                            self.current_pos[2]+dz]
+        new_robot_rpy=[current_rpy[0]+droll,
+                            current_rpy[1]+dpitch,
+                            current_rpy[2]+dyaw]
+        go_to_target(self.RobotUid, self.base_link, self.effector_link, new_robot_pos, new_robot_rpy)
+
         
         # get current pos
         self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
@@ -326,16 +425,7 @@ class ReachEnv(gym.Env):
             self.current_joint_position.append(p.getJointState(bodyUniqueId=self.RobotUid, jointIndex=i)[0])
         
         # logging.debug("self.current_pos={}\n".format(self.current_pos))
-        
-        # calculate the new pose
-        new_robots_pos = self.current_joint_position + vel
-
-        for i in range(self.base_link, self.effector_link):
-            p.resetJointState(bodyUniqueId=self.RobotUid,
-                                    jointIndex=i,
-                                    targetValue=new_robots_pos[i],
-                                    )
-
+ 
         # update current pose
         self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
         self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
@@ -382,19 +472,22 @@ class ReachEnv(gym.Env):
         
         reward = 2000*r1+r2
 
-        
         # success
         is_success = False
         if self.distance<self.distance_threshold:
             self.terminated=True
             is_success = True
+            reward = 200
         elif self.step_counter>self.max_steps_one_episode:
             self.terminated=True
+            reward = 2000*r1
         elif self.collided:
             self.terminated=True
+            reward = -200
         # this episode goes on
         else:
             self.terminated=False
+            reward = 0
 
         info={'step':self.step_counter,
               'distance':self.distance,
@@ -404,18 +497,17 @@ class ReachEnv(gym.Env):
               'is_success': is_success}
         
         # if self.terminated: 
-            # print(info)
+        #     print(info)
             # logger.debug(info)
         
         return self._get_obs(),reward,self.terminated,info
     
     def _get_obs(self):
-        self.state[0:6] = self.current_joint_position[1:]
-        self.state[6:9] = np.asarray(self.current_pos)-np.asarray(self.target_position)
+        self.state[0:3] = np.asarray(self.current_pos)-np.asarray(self.target_position)
+        self.state[3:7] = self.current_orn
         self.distance = np.linalg.norm(np.asarray(list(self.current_pos))-np.asarray(self.target_position), ord=None)
-        self.state[9] = self.distance
-        self.state[10] = float(self.collided)
-        # print (self.distance)
+        self.state[7] = self.distance
+        # print (self.state)
         return{
             'position': self.state,
             'rays': self.obs_rays
@@ -461,7 +553,7 @@ class ReachEnv(gym.Env):
     
 if __name__ == '__main__':
     
-    env = ReachEnv(is_render=True, is_good_view=False)
+    env = MyReachEnv(is_render=True, is_good_view=False)
     episodes = 100
     for episode in range(episodes):
         state = env.reset()
