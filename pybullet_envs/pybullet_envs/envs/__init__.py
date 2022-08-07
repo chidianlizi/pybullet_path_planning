@@ -1,3 +1,5 @@
 from pybullet_envs.envs.general_env import ReachEnv
 from pybullet_envs.envs.static_env import StaticReachEnv
+from pybullet_envs.envs.reach_env import ReachWithoutObstaclesEnv
 from pybullet_envs.envs.my_general_env import MyReachEnv
+from pybullet_envs.envs.pcl_general_env import ReachWithPCLEnv

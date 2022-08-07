@@ -6,24 +6,12 @@ import gym
 from gym import spaces
 import time
 import math
-import random
-import string
 from random import choice
-import logging
 CURRENT_PATH = os.path.abspath(__file__)
 BASE = os.path.dirname(os.path.dirname(CURRENT_PATH)) 
 ROOT = os.path.dirname(BASE) 
 sys.path.insert(0,os.path.dirname(CURRENT_PATH))
 from pybullet_util import go_to_target
-
-# LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
-# DATE_FORMAT = "%m/%d/%Y %H:%M:%S %p"
-# ran_str = ''.join(random.sample(string.ascii_letters + string.digits, 8))
-# logging.basicConfig(filename='general_env_'+ran_str+'.log', 
-#                     level=logging.DEBUG, 
-#                     format=LOG_FORMAT, 
-#                     datefmt=DATE_FORMAT)
-# logger = logging.getLogger(__name__)
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
 def quaternion_matrix(quaternion):
@@ -54,8 +42,6 @@ def get_angle(vector_1, vector_2):
     angle_deg = np.rad2deg(angle)
     return angle, angle_deg
 
-
-
 def show_target(position):
     visual_id = p.createVisualShape(shapeType=p.GEOM_SPHERE, radius=0.02, rgbaColor=[1,0,0,1])
     point_id = p.createMultiBody(
@@ -64,8 +50,8 @@ def show_target(position):
                 basePosition=position,
                 )
 
-class ReachEnv(gym.Env):
-    def __init__(self, is_render=True, is_good_view=True, is_train=True):
+class ReachWithoutObstaclesEnv(gym.Env):
+    def __init__(self, is_render=False, is_good_view=False, is_train=True):
         '''
         is_render: start GUI
         is_good_view: slow down the motion to have a better look
@@ -74,7 +60,7 @@ class ReachEnv(gym.Env):
         self.is_render=is_render
         self.is_good_view=is_good_view
         self.is_train = is_train
-        self.DISPLAY_BOUNDARY = False
+        self.DISPLAY_BOUNDARY = True
         if self.is_render:
             self.physicsClient = p.connect(p.GUI)
         else:
@@ -94,7 +80,7 @@ class ReachEnv(gym.Env):
 
         # action sapce
         self.action = None
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(6,), dtype=np.float32) # angular velocities
+        self.action_space = spaces.Box(low=-np.pi, high=np.pi, shape=(6,), dtype=np.float32) # angular velocities
         
         # parameters for spatial infomation
         self.home = [0, np.pi/2, -np.pi/6, -2*np.pi/3, -4*np.pi/9, np.pi/2, 0.0]
@@ -120,14 +106,13 @@ class ReachEnv(gym.Env):
         self.step_counter=0
         # max steps in one episode
         self.max_steps_one_episode = 2048
-        # whether collision
-        self.collided = None
+
         # path to urdf of robot arm
         self.urdf_root_path = os.path.join(BASE, 'ur5_description/urdf/ur5.urdf')
         # link indexes
         self.base_link = 1
         self.effector_link = 7
-        self.distance_threshold = 0.04
+        self.distance_threshold = 0.05
         
         # # parameters of augmented targets for training
         # if self.is_train:
@@ -158,20 +143,9 @@ class ReachEnv(gym.Env):
                         np.random.uniform(-np.pi/4, -np.pi/12),
                         np.random.uniform(5*np.pi/12, 7*np.pi/12),0.0]
         return home
-    def create_visual_box(self, halfExtents):
-        visual_id = p.createVisualShape(shapeType=p.GEOM_BOX, halfExtents=halfExtents, rgbaColor=[0.5,0.5,0.5,1])
-        return visual_id
-    def create_collision_box(self, halfExtents):
-        collision_id = p.createCollisionShape(shapeType=p.GEOM_BOX, halfExtents=halfExtents)
-        return collision_id
-    def create_visual_sphere(self, radius):
-        visual_id = p.createVisualShape(shapeType=p.GEOM_SPHERE, radius=radius, rgbaColor=[0.5,0.5,0.5,1])
-        return visual_id
-    def create_collision_sphere(self, radius):
-        collision_id = p.createCollisionShape(shapeType=p.GEOM_SPHERE, radius=radius)
-        return collision_id    
     
-    def add_obstacles(self):
+    
+    def _set_target(self):
         rand = np.float32(np.random.rand(3,))
         target_x = self.x_low_obs+rand[0]*(self.x_high_obs-self.x_low_obs)
         target_y = self.y_low_obs+rand[1]*(self.y_high_obs-self.y_low_obs)
@@ -179,71 +153,17 @@ class ReachEnv(gym.Env):
         target_position = [target_x, target_y, target_z]
         # print (target_position)
         show_target(target_position)
-        obsts = []
-        rand = np.float32(np.random.rand(3,))
-        obst_x = self.x_high_obs/2-rand[0]*(self.x_high_obs/2-self.x_low_obs/2)
-        obst_y = 0.05+self.y_high_obs-rand[1]*(self.y_high_obs-self.y_low_obs)
-        obst_z = self.z_high_obs
-        obst_id = p.createMultiBody(
-                        baseMass=0,
-                        baseVisualShapeIndex=self.create_visual_box([0.12,0.1,0.003]),
-                        baseCollisionShapeIndex=self.create_collision_box([0.12,0.1,0.003]),
-                        basePosition=[obst_x, obst_y, obst_z]
-                    )
-        obsts.append(obst_id)
-        for i in range(4):
-            obst_position = target_position
-            val = False
-            type = np.random.random()
-            rate = np.random.random()
-            if (rate > 0.33) and (type > 0.15):
-                while not val:
-                    rand = np.float32(np.random.rand(3,))
-                    obst_x = self.x_high_obs-rand[0]*(self.x_high_obs-self.x_low_obs)
-                    obst_y = 0.05+self.y_high_obs-rand[1]*0.8*(self.y_high_obs-self.y_low_obs)
-                    obst_z = self.z_low_obs+(rand[2])*0.6*(self.z_high_obs-self.z_low_obs)
-                    obst_position = [obst_x, obst_y, obst_z]
-                    diff = abs(np.asarray(target_position)-np.asarray(obst_position))
-                    val = (diff>0.05).all() and (np.linalg.norm(diff)<0.4)
-                halfExtents = list(np.float32(np.random.uniform(0.8,1.2)*np.array([0.12,0.12,0.01])))
-                obst_orientation = [[0.707, 0, 0, 0.707], [0, 0.707, 0, 0.707], [0, 0, 0.707, 0.707]]
-                obst_id = p.createMultiBody(
-                        baseMass=0,
-                        baseVisualShapeIndex=self.create_visual_box(halfExtents),
-                        baseCollisionShapeIndex=self.create_collision_box(halfExtents),
-                        basePosition=obst_position,
-                        baseOrientation=choice(obst_orientation)
-                    )
-                obsts.append(obst_id)
-            if (rate > 0.33) and (type <= 0.15):
-                while not val:
-                    rand = np.float32(np.random.rand(3,))
-                    obst_x = self.x_high_obs-rand[0]*(self.x_high_obs-self.x_low_obs)
-                    obst_y = self.y_high_obs-(rand[1]/2)*(self.y_high_obs-self.y_low_obs)
-                    obst_z = self.z_high_obs-rand[2]*(self.z_high_obs-self.z_low_obs)
-                    obst_position = [obst_x, obst_y, obst_z]
-                    diff = abs(np.asarray(target_position)-np.asarray(obst_position))
-                    val = (diff>0.05).all()
-                radius = np.float32(np.random.uniform(0.08,0.1))                
-                obst_id = p.createMultiBody(
-                        baseMass=0,
-                        baseVisualShapeIndex=self.create_visual_sphere(radius),
-                        baseCollisionShapeIndex=self.create_collision_sphere(radius),
-                        basePosition=obst_position,
-                    )
-                obsts.append(obst_id)
-        return target_position, obsts
-
+        
+        return target_position
                      
     def reset(self):
         p.resetSimulation()
-        # print(time.time())
+        print(time.time())
 
-        self.target_position, self.obsts = self.add_obstacles()
+        self.target_position = self._set_target()
         
         # reset
         self.step_counter = 0
-        self.collided = False
 
         #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
         self.terminated=False
@@ -348,12 +268,7 @@ class ReachEnv(gym.Env):
             self.obs_rays[i] = ray[2]
         # print (self.obs_rays)
         
-        # check collision
-        for i in range(len(self.obsts)):
-            contacts = p.getContactPoints(bodyA=self.RobotUid, bodyB=self.obsts[i])        
-            if len(contacts)>0:
-                self.collided = True
-        
+       
         
         p.stepSimulation()
         if self.is_good_view:
@@ -368,30 +283,16 @@ class ReachEnv(gym.Env):
         # distance between torch head and target postion
         self.distance = np.linalg.norm(np.asarray(list(self.current_pos))-np.asarray(self.target_position), ord=None)
         # print(self.distance)
-        dd = 0.1
-        if self.distance < dd:
-            r1 = -0.5*self.distance*self.distance
-        else:
-            r1 = -dd*(abs(self.distance)-0.5*dd)
-
-        # be punished when collided
-        if self.collided:
-            r2 = -200
-        else:
-            r2 = 0
-        
-        reward = 2000*r1+r2
-
-        
+        reward = 0   
         # success
         is_success = False
         if self.distance<self.distance_threshold:
+            reward = 1
             self.terminated=True
             is_success = True
         elif self.step_counter>self.max_steps_one_episode:
             self.terminated=True
-        elif self.collided:
-            self.terminated=True
+
         # this episode goes on
         else:
             self.terminated=False
@@ -400,12 +301,10 @@ class ReachEnv(gym.Env):
               'distance':self.distance,
               'terminated':self.terminated,
               'reward':reward,
-              'collided': self.collided,
-              'is_success': is_success}
+              'is_success':is_success}
         
         # if self.terminated: 
-            # print(info)
-            # logger.debug(info)
+        #     print(info)
         
         return self._get_obs(),reward,self.terminated,info
     
@@ -414,7 +313,7 @@ class ReachEnv(gym.Env):
         self.state[6:9] = np.asarray(self.current_pos)-np.asarray(self.target_position)
         self.distance = np.linalg.norm(np.asarray(list(self.current_pos))-np.asarray(self.target_position), ord=None)
         self.state[9] = self.distance
-        self.state[10] = float(self.collided)
+        self.state[10] = 0.0
         # print (self.distance)
         return{
             'position': self.state,
@@ -461,7 +360,7 @@ class ReachEnv(gym.Env):
     
 if __name__ == '__main__':
     
-    env = ReachEnv(is_render=True, is_good_view=False)
+    env = ReachWithoutObstaclesEnv(is_render=True, is_good_view=False)
     episodes = 100
     for episode in range(episodes):
         state = env.reset()

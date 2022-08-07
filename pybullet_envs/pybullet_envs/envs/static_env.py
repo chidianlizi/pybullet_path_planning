@@ -53,7 +53,7 @@ def show_target(position):
                 )
 
 class StaticReachEnv(gym.Env):
-    def __init__(self, is_render=False, is_good_view=False, is_train=True):
+    def __init__(self, is_render=True, is_good_view=True, is_train=True):
         '''
         is_render: start GUI
         is_good_view: slow down the motion to have a better look

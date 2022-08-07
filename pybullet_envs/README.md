@@ -20,6 +20,14 @@ python train_ppo.py
   - stable_baselines3
   - tensorflow 2
 ***
+- Introduction:
+  - env:
+    - general_env: action space is velocity of joints, observation is position+rays, with obstacles
+    - static_env: reproduction of that paper, action space is velocity of joints, observation is position only
+    - reach_env: action space is velocity of joints, observation is position+rays, without obstacles
+    - my_general_env: action space is posture of end effector, observation is position+rays, with obstacles
+    - pcl_general_env: action space is posture of end effector, observation is position+pcl, with obstacles, using pn++ for training
+***
 - Notes:
 
   - The tensorboard logs are stored in the folder './ddpg_tf_logs/' or './ppo_tf_logs/', use "tensorboard --logdir ./ddpg_tf_logs"

@@ -209,7 +209,7 @@ class MyReachEnv(gym.Env):
         # link indexes
         self.base_link = 1
         self.effector_link = 7
-        self.distance_threshold = 0.04
+        self.distance_threshold = 0.05
         
         # # parameters of augmented targets for training
         # if self.is_train:
@@ -383,6 +383,7 @@ class MyReachEnv(gym.Env):
         lidar_results = self._set_lidar()
         for i, ray in enumerate(lidar_results):
             self.obs_rays[i] = ray[2]
+            
         for i in range(self.base_link, self.effector_link):
             self.current_joint_position.append(p.getJointState(bodyUniqueId=self.RobotUid, jointIndex=i)[0])
 
@@ -417,7 +418,7 @@ class MyReachEnv(gym.Env):
         go_to_target(self.RobotUid, self.base_link, self.effector_link, new_robot_pos, new_robot_rpy)
 
         
-        # get current pos
+        # update current pose
         self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
         self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
         self.current_joint_position = [0]
@@ -426,12 +427,6 @@ class MyReachEnv(gym.Env):
         
         # logging.debug("self.current_pos={}\n".format(self.current_pos))
  
-        # update current pose
-        self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
-        self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
-        self.current_joint_position = [0]
-        for i in range(self.base_link, self.effector_link):
-            self.current_joint_position.append(p.getJointState(bodyUniqueId=self.RobotUid, jointIndex=i)[0])
         # get lidar observation
         lidar_results = self._set_lidar()
         for i, ray in enumerate(lidar_results):

@@ -10,6 +10,7 @@ import random
 import string
 from random import choice
 import logging
+import open3d as o3d
 CURRENT_PATH = os.path.abspath(__file__)
 BASE = os.path.dirname(os.path.dirname(CURRENT_PATH)) 
 ROOT = os.path.dirname(BASE) 
@@ -24,8 +25,92 @@ from pybullet_util import go_to_target
 #                     format=LOG_FORMAT, 
 #                     datefmt=DATE_FORMAT)
 # logger = logging.getLogger(__name__)
+
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
+
+# axis sequences for Euler angles
+_NEXT_AXIS = [1, 2, 0, 1]
+
+# map axes strings to/from tuples of inner axis, parity, repetition, frame
+_AXES2TUPLE = {
+    'sxyz': (0, 0, 0, 0), 'sxyx': (0, 0, 1, 0), 'sxzy': (0, 1, 0, 0),
+    'sxzx': (0, 1, 1, 0), 'syzx': (1, 0, 0, 0), 'syzy': (1, 0, 1, 0),
+    'syxz': (1, 1, 0, 0), 'syxy': (1, 1, 1, 0), 'szxy': (2, 0, 0, 0),
+    'szxz': (2, 0, 1, 0), 'szyx': (2, 1, 0, 0), 'szyz': (2, 1, 1, 0),
+    'rzyx': (0, 0, 0, 1), 'rxyx': (0, 0, 1, 1), 'ryzx': (0, 1, 0, 1),
+    'rxzx': (0, 1, 1, 1), 'rxzy': (1, 0, 0, 1), 'ryzy': (1, 0, 1, 1),
+    'rzxy': (1, 1, 0, 1), 'ryxy': (1, 1, 1, 1), 'ryxz': (2, 0, 0, 1),
+    'rzxz': (2, 0, 1, 1), 'rxyz': (2, 1, 0, 1), 'rzyz': (2, 1, 1, 1)}
+
+_TUPLE2AXES = dict((v, k) for k, v in _AXES2TUPLE.items())
+def euler_from_matrix(matrix, axes='sxyz'):
+    """Return Euler angles from rotation matrix for specified axis sequence.
+
+    axes : One of 24 axis sequences as string or encoded tuple
+
+    Note that many Euler angle triplets can describe one matrix.
+
+    >>> R0 = euler_matrix(1, 2, 3, 'syxz')
+    >>> al, be, ga = euler_from_matrix(R0, 'syxz')
+    >>> R1 = euler_matrix(al, be, ga, 'syxz')
+    >>> numpy.allclose(R0, R1)
+    True
+    >>> angles = (4.0*math.pi) * (numpy.random.random(3) - 0.5)
+    >>> for axes in _AXES2TUPLE.keys():
+    ...    R0 = euler_matrix(axes=axes, *angles)
+    ...    R1 = euler_matrix(axes=axes, *euler_from_matrix(R0, axes))
+    ...    if not numpy.allclose(R0, R1): print axes, "failed"
+
+    """
+    try:
+        firstaxis, parity, repetition, frame = _AXES2TUPLE[axes.lower()]
+    except (AttributeError, KeyError):
+        _ = _TUPLE2AXES[axes]
+        firstaxis, parity, repetition, frame = axes
+
+    i = firstaxis
+    j = _NEXT_AXIS[i+parity]
+    k = _NEXT_AXIS[i-parity+1]
+
+    M = np.array(matrix, dtype=np.float64, copy=False)[:3, :3]
+    if repetition:
+        sy = math.sqrt(M[i, j]*M[i, j] + M[i, k]*M[i, k])
+        if sy > _EPS:
+            ax = math.atan2( M[i, j],  M[i, k])
+            ay = math.atan2( sy,       M[i, i])
+            az = math.atan2( M[j, i], -M[k, i])
+        else:
+            ax = math.atan2(-M[j, k],  M[j, j])
+            ay = math.atan2( sy,       M[i, i])
+            az = 0.0
+    else:
+        cy = math.sqrt(M[i, i]*M[i, i] + M[j, i]*M[j, i])
+        if cy > _EPS:
+            ax = math.atan2( M[k, j],  M[k, k])
+            ay = math.atan2(-M[k, i],  cy)
+            az = math.atan2( M[j, i],  M[i, i])
+        else:
+            ax = math.atan2(-M[j, k],  M[j, j])
+            ay = math.atan2(-M[k, i],  cy)
+            az = 0.0
+
+    if parity:
+        ax, ay, az = -ax, -ay, -az
+    if frame:
+        ax, az = az, ax
+    return ax, ay, az
+
+def euler_from_quaternion(quaternion, axes='sxyz'):
+    """Return Euler angles from quaternion for specified axis sequence.
+
+    >>> angles = euler_from_quaternion([0.06146124, 0, 0, 0.99810947])
+    >>> numpy.allclose(angles, [0.123, 0, 0])
+    True
+
+    """
+    return euler_from_matrix(quaternion_matrix(quaternion), axes)
+
 def quaternion_matrix(quaternion):
     """Return homogeneous rotation matrix from quaternion.
 
@@ -64,8 +149,9 @@ def show_target(position):
                 basePosition=position,
                 )
 
-class ReachEnv(gym.Env):
-    def __init__(self, is_render=True, is_good_view=True, is_train=True):
+
+class ReachWithPCLEnv(gym.Env):
+    def __init__(self, is_render=False, is_good_view=False, is_train=True):
         '''
         is_render: start GUI
         is_good_view: slow down the motion to have a better look
@@ -75,6 +161,7 @@ class ReachEnv(gym.Env):
         self.is_good_view=is_good_view
         self.is_train = is_train
         self.DISPLAY_BOUNDARY = False
+        self.SHOW_PCL = False
         if self.is_render:
             self.physicsClient = p.connect(p.GUI)
         else:
@@ -108,10 +195,10 @@ class ReachEnv(gym.Env):
         
         # observation space
         self.state = np.zeros((11,), dtype=np.float32)
-        self.obs_rays = np.zeros(shape=(577,),dtype=np.float32)
+        self.obs_pc = np.zeros(shape=(577,3),dtype=np.float32)
         obs_spaces = {
             'position': spaces.Box(low=-5.0, high=5.0, shape=(11,), dtype=np.float32), # target position, torch position and quaternion
-            'rays': spaces.Box(low=0, high=2, shape=(577,),dtype=np.float32),
+            'pc': spaces.Box(low=-5.0, high=5.0, shape=(577,3),dtype=np.float32),
         } 
         self.observation_space=spaces.Dict(obs_spaces)
         
@@ -119,7 +206,7 @@ class ReachEnv(gym.Env):
         # step counter
         self.step_counter=0
         # max steps in one episode
-        self.max_steps_one_episode = 2048
+        self.max_steps_one_episode = 128
         # whether collision
         self.collided = None
         # path to urdf of robot arm
@@ -127,8 +214,13 @@ class ReachEnv(gym.Env):
         # link indexes
         self.base_link = 1
         self.effector_link = 7
-        self.distance_threshold = 0.04
+        self.distance_threshold = 0.05
         
+        
+        
+        if self.SHOW_PCL:
+            self.vis = o3d.visualization.Visualizer()
+            self.vis.create_window()
         # # parameters of augmented targets for training
         # if self.is_train:
             
@@ -150,12 +242,21 @@ class ReachEnv(gym.Env):
         # self.episode_counter = 0
         # self.episode_interval = 50
         # self.success_counter = 0
-    
+    def show_pcl(self, points):
+        point_cloud = o3d.geometry.PointCloud()
+        point_cloud.points = o3d.utility.Vector3dVector(points)
+        coor = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+        self.vis.add_geometry(point_cloud)
+        self.vis.add_geometry(coor)
+        self.vis.poll_events()
+        self.vis.update_renderer()
+        self.vis.clear_geometries()
+        # o3d.visualization.draw_geometries([point_cloud])
     def _set_home(self):
         home = [0.0, np.random.uniform(5*np.pi/12, 7*np.pi/12),
                         np.random.uniform(-np.pi/4, -np.pi/12),
                         np.random.uniform(-3*np.pi/4, -np.pi/2),
-                        np.random.uniform(-np.pi/4, -np.pi/12),
+                        np.random.uniform(-5*np.pi/12, -3*np.pi/12),
                         np.random.uniform(5*np.pi/12, 7*np.pi/12),0.0]
         return home
     def create_visual_box(self, halfExtents):
@@ -297,9 +398,15 @@ class ReachEnv(gym.Env):
         self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
         self.current_joint_position = [0]
         # get lidar observation
-        lidar_results = self._set_lidar()
+        lidar_results, ray_froms, ray_tops = self._set_lidar()
         for i, ray in enumerate(lidar_results):
-            self.obs_rays[i] = ray[2]
+            if (np.asarray(ray[3]) == 0).all():
+                self.obs_pc[i] = np.asarray(ray_tops[i])-self.current_pos
+            else:
+                self.obs_pc[i] = np.asarray(ray[3])-self.current_pos
+        if self.SHOW_PCL:
+            self.show_pcl(self.obs_pc)
+            
         for i in range(self.base_link, self.effector_link):
             self.current_joint_position.append(p.getJointState(bodyUniqueId=self.RobotUid, jointIndex=i)[0])
 
@@ -314,40 +421,44 @@ class ReachEnv(gym.Env):
         # print (action)
         # set a coefficient to prevent the action from being too large
         self.action = action
-        dv = 0.01
-        vel = np.zeros((7,))
-        vel[1:] = action * dv
+        dv = 0.05
+        dx = action[0]*dv
+        dy = action[1]*dv
+        dz = action[2]*dv
+        droll= action[3]*dv
+        dpitch = action[4]*dv
+        dyaw = action[5]*dv
         
-        # get current pos
         self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
         self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
-        self.current_joint_position = [0]
-        for i in range(self.base_link, self.effector_link):
-            self.current_joint_position.append(p.getJointState(bodyUniqueId=self.RobotUid, jointIndex=i)[0])
+        current_rpy = euler_from_quaternion(self.current_orn)
+        new_robot_pos=[self.current_pos[0]+dx,
+                            self.current_pos[1]+dy,
+                            self.current_pos[2]+dz]
+        new_robot_rpy=[current_rpy[0]+droll,
+                            current_rpy[1]+dpitch,
+                            current_rpy[2]+dyaw]
+        go_to_target(self.RobotUid, self.base_link, self.effector_link, new_robot_pos, new_robot_rpy)
         
-        # logging.debug("self.current_pos={}\n".format(self.current_pos))
-        
-        # calculate the new pose
-        new_robots_pos = self.current_joint_position + vel
-
-        for i in range(self.base_link, self.effector_link):
-            p.resetJointState(bodyUniqueId=self.RobotUid,
-                                    jointIndex=i,
-                                    targetValue=new_robots_pos[i],
-                                    )
-
         # update current pose
         self.current_pos = p.getLinkState(self.RobotUid,self.effector_link)[4]
         self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
         self.current_joint_position = [0]
         for i in range(self.base_link, self.effector_link):
             self.current_joint_position.append(p.getJointState(bodyUniqueId=self.RobotUid, jointIndex=i)[0])
-        # get lidar observation
-        lidar_results = self._set_lidar()
-        for i, ray in enumerate(lidar_results):
-            self.obs_rays[i] = ray[2]
-        # print (self.obs_rays)
+      
         
+        # logging.debug("self.current_pos={}\n".format(self.current_pos))
+        
+        # get lidar observation
+        lidar_results, ray_froms, ray_tops = self._set_lidar()
+        for i, ray in enumerate(lidar_results):
+            if (np.asarray(ray[3]) == 0).all():
+                self.obs_pc[i] = np.asarray(ray_tops[i])-self.current_pos
+            else:
+                self.obs_pc[i] = np.asarray(ray[3])-self.current_pos
+        if self.SHOW_PCL:
+            self.show_pcl(self.obs_pc)        
         # check collision
         for i in range(len(self.obsts)):
             contacts = p.getContactPoints(bodyA=self.RobotUid, bodyB=self.obsts[i])        
@@ -382,19 +493,22 @@ class ReachEnv(gym.Env):
         
         reward = 2000*r1+r2
 
-        
         # success
         is_success = False
         if self.distance<self.distance_threshold:
             self.terminated=True
             is_success = True
+            reward = 200
         elif self.step_counter>self.max_steps_one_episode:
             self.terminated=True
+            reward = 2000*r1
         elif self.collided:
             self.terminated=True
+            reward = -200
         # this episode goes on
         else:
             self.terminated=False
+            reward = 0
 
         info={'step':self.step_counter,
               'distance':self.distance,
@@ -404,24 +518,24 @@ class ReachEnv(gym.Env):
               'is_success': is_success}
         
         # if self.terminated: 
-            # print(info)
+        #     print(info)
             # logger.debug(info)
         
         return self._get_obs(),reward,self.terminated,info
     
     def _get_obs(self):
-        self.state[0:6] = self.current_joint_position[1:]
-        self.state[6:9] = np.asarray(self.current_pos)-np.asarray(self.target_position)
+        self.state[0:3] = self.target_position
+        self.state[3:6] = self.current_pos
+        self.state[6:10] = self.current_orn
         self.distance = np.linalg.norm(np.asarray(list(self.current_pos))-np.asarray(self.target_position), ord=None)
-        self.state[9] = self.distance
-        self.state[10] = float(self.collided)
+        self.state[10] = self.distance
         # print (self.distance)
         return{
             'position': self.state,
-            'rays': self.obs_rays
+            'pc': self.obs_pc
         }
     
-    def _set_lidar(self, ray_length=2, ray_num_hor=72, render=False):
+    def _set_lidar(self, ray_length=1, ray_num_hor=72, render=False):
         ray_froms = []
         ray_tops = []
         frame = quaternion_matrix(self.current_orn)
@@ -456,12 +570,12 @@ class ReachEnv(gym.Env):
                     p.addUserDebugLine(ray_froms[index], ray_tops[index], missRayColor)
                 else:
                     p.addUserDebugLine(ray_froms[index], ray_tops[index], hitRayColor)
-        return results
+        return results, ray_froms, ray_tops
 
     
 if __name__ == '__main__':
     
-    env = ReachEnv(is_render=True, is_good_view=False)
+    env = ReachWithPCLEnv(is_render=True, is_good_view=False)
     episodes = 100
     for episode in range(episodes):
         state = env.reset()
