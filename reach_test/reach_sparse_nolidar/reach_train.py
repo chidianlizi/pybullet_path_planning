@@ -13,7 +13,7 @@ from typing import Callable
 import pybullet_envs
 CURRENT_PATH = os.path.abspath(__file__)
 sys.path.insert(0,os.path.dirname(CURRENT_PATH))
-from my_reach_env_simp import MySimpleReachEnv
+from reach_env import MySimpleReachEnv
 # change here
 IS_TRAIN = True
 

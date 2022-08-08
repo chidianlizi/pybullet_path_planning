@@ -420,6 +420,7 @@ class MySimpleReachEnv(gym.Env):
         if self.distance<self.distance_threshold:
             self.terminated=True
             is_success = True
+            self.success_counter += 1
             reward = 10
         elif self.step_counter>self.max_steps_one_episode:
             self.terminated=True
