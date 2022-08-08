@@ -191,10 +191,10 @@ class MySimpleReachEnv(gym.Env):
         
         # observation space
         self.state = np.zeros((11,), dtype=np.float32)
-        self.obs_rays = np.zeros(shape=(37,),dtype=np.float32)
+        self.obs_rays = np.zeros(shape=(289,),dtype=np.float32)
         obs_spaces = {
             'position': spaces.Box(low=-2, high=2, shape=(11,), dtype=np.float32),
-            'rays': spaces.Box(low=0, high=2, shape=(37,),dtype=np.float32),
+            'rays': spaces.Box(low=0, high=2, shape=(289,),dtype=np.float32),
         } 
         self.observation_space=spaces.Dict(obs_spaces)
         
@@ -254,70 +254,28 @@ class MySimpleReachEnv(gym.Env):
         collision_id = p.createCollisionShape(shapeType=p.GEOM_SPHERE, radius=radius)
         return collision_id    
     
-    def _add_obstacles(self):
+    def _set_target(self):
         rand = np.float32(np.random.rand(3,))
         target_x = self.x_low_obs+rand[0]*(self.x_high_obs-self.x_low_obs)
         target_y = self.y_low_obs+rand[1]*(self.y_high_obs-self.y_low_obs)
-        target_z = self.z_low_obs+rand[1]*(self.z_high_obs-self.z_low_obs)
+        target_z = self.z_low_obs+rand[2]*(self.z_high_obs-self.z_low_obs)
         target_position = [target_x, target_y, target_z]
         # print (target_position)
         show_target(target_position)
+        
+        return target_position
+    
+    def _add_obstacles(self):
         obsts = []
-        obst_x = target_x
-        obst_y = target_y
-        obst_z = target_z-0.0205
+        position = 0.5*(np.array(self.current_pos)+np.array(self.target_position))
         obst_id = p.createMultiBody(
                         baseMass=0,
-                        baseVisualShapeIndex=self._create_visual_box([0.1,0.1,0.001]),
-                        baseCollisionShapeIndex=self._create_collision_box([0.1,0.1,0.001]),
-                        basePosition=[obst_x, obst_y, obst_z]
+                        baseVisualShapeIndex=self._create_visual_box([0.05,0.05,0.001]),
+                        baseCollisionShapeIndex=self._create_collision_box([0.05,0.05,0.001]),
+                        basePosition=position
                     )
         obsts.append(obst_id)
-        if np.random.random()<0.5:        
-            obst_x = target_x
-            obst_y = target_y-0.1
-            obst_z = target_z+0.01
-            obst_id = p.createMultiBody(
-                            baseMass=0,
-                            baseVisualShapeIndex=self._create_visual_box([0.1,0.002,0.03]),
-                            baseCollisionShapeIndex=self._create_collision_box([0.1,0.002,0.03]),
-                            basePosition=[obst_x, obst_y, obst_z]
-                        )
-            obsts.append(obst_id)
-        if np.random.random()<0.5: 
-            obst_x = target_x
-            obst_y = target_y+0.1
-            obst_z = target_z+0.01
-            obst_id = p.createMultiBody(
-                            baseMass=0,
-                            baseVisualShapeIndex=self._create_visual_box([0.1,0.002,0.03]),
-                            baseCollisionShapeIndex=self._create_collision_box([0.1,0.002,0.03]),
-                            basePosition=[obst_x, obst_y, obst_z]
-                        )
-            obsts.append(obst_id)
-        if np.random.random()<0.5: 
-            obst_x = target_x-0.1
-            obst_y = target_y
-            obst_z = target_z+0.01
-            obst_id = p.createMultiBody(
-                            baseMass=0,
-                            baseVisualShapeIndex=self._create_visual_box([0.002,0.1,0.03]),
-                            baseCollisionShapeIndex=self._create_collision_box([0.002,0.01,0.03]),
-                            basePosition=[obst_x, obst_y, obst_z]
-                        )
-            obsts.append(obst_id)
-        if np.random.random()<0.5: 
-            obst_x = target_x+0.1
-            obst_y = target_y
-            obst_z = target_z+0.01
-            obst_id = p.createMultiBody(
-                            baseMass=0,
-                            baseVisualShapeIndex=self._create_visual_box([0.002,0.1,0.03]),
-                            baseCollisionShapeIndex=self._create_collision_box([0.002,0.01,0.03]),
-                            basePosition=[obst_x, obst_y, obst_z]
-                        )
-            obsts.append(obst_id)
-        return target_position, obsts                     
+        return obsts                  
     
     
     
@@ -325,7 +283,7 @@ class MySimpleReachEnv(gym.Env):
         p.resetSimulation()
         # print(time.time())
 
-        self.target_position, self.obsts = self._add_obstacles()
+        self.target_position = self._set_target()
         
         # reset
         self.step_counter = 0
@@ -381,8 +339,9 @@ class MySimpleReachEnv(gym.Env):
         self.current_orn = p.getLinkState(self.RobotUid,self.effector_link)[5]
 
         self.current_joint_position = [0]
+        self.obsts = self._add_obstacles()
         # get lidar observation
-        lidar_results = self._set_lidar_cylinder()
+        lidar_results = self._set_lidar()
         for i, ray in enumerate(lidar_results):
             self.obs_rays[i] = ray[2]
             
@@ -446,7 +405,7 @@ class MySimpleReachEnv(gym.Env):
         # logging.debug("self.current_pos={}\n".format(self.current_pos))
  
         # get lidar observation
-        lidar_results = self._set_lidar_cylinder()
+        lidar_results = self._set_lidar()
         for i, ray in enumerate(lidar_results):
             self.obs_rays[i] = ray[2]
         # print (self.obs_rays)
@@ -496,20 +455,20 @@ class MySimpleReachEnv(gym.Env):
             self.terminated=True
             is_success = True
             self.success_counter += 1
-            reward = 1
+            reward = 10
         elif self.step_counter>self.max_steps_one_episode:
             self.terminated=True
             if out:
-                reward = -1
+                reward = -5
             else:
-                reward = 0
+                reward = -0.01*self.distance
         elif self.collided:
             self.terminated=True
-            reward = -1
+            reward = -10
         # this episode goes on
         else:
             self.terminated=False
-            reward = 0
+            reward = -0.01*self.distance
 
         info={'step':self.step_counter,
               'distance':self.distance,
@@ -535,32 +494,29 @@ class MySimpleReachEnv(gym.Env):
             'rays': self.obs_rays
         }
     
-    def _set_lidar_cylinder(self, ray_min=0.02, ray_max=0.2, ray_num_ver=2, ray_num_hor=18, render=False):
+    def _set_lidar(self, ray_length=1, ray_num_hor=72, render=False):
         ray_froms = []
         ray_tops = []
         frame = quaternion_matrix(self.current_orn)
         frame[0:3,3] = self.current_pos
         ray_froms.append(list(self.current_pos))
-        ray_tops.append(np.matmul(np.asarray(frame),np.array([0.0,0.0,1,1]).T)[0:3].tolist())
+        ray_tops.append(np.matmul(np.asarray(frame),np.array([0.0,0.0,ray_length,1]).T)[0:3].tolist())
 
         # set the angle of rays
-        interval = -0.05
-        for angle in range(ray_num_ver):
+        for angle in range(254, 270, 4):
             for i in range(ray_num_hor):
-                z_start = angle*interval
-                x_start = ray_min*math.cos(2*math.pi*float(i)/ray_num_hor)
-                y_start = ray_min*math.sin(2*math.pi*float(i)/ray_num_hor)
-                start = np.matmul(np.asarray(frame),np.array([x_start,y_start,z_start,1]).T)[0:3].tolist()
-
-                z_end = (angle)*interval
-                x_end = ray_max*math.cos(2*math.pi*float(i)/ray_num_hor)
-                y_end = ray_max*math.sin(2*math.pi*float(i)/ray_num_hor)
-                end = np.matmul(np.asarray(frame),np.array([x_end,y_end,z_end,1]).T)[0:3].tolist()
+                z = -ray_length * math.sin(angle*np.pi/180)
+                l = ray_length * math.cos(angle*np.pi/180)
+                x_end = l*math.cos(2*math.pi*float(i)/ray_num_hor)
+                y_end = l*math.sin(2*math.pi*float(i)/ray_num_hor)
+                start = list(self.current_pos)
+                end = np.matmul(np.asarray(frame),np.array([x_end,y_end,z,1]).T)[0:3].tolist()
                 ray_froms.append(start)
                 ray_tops.append(end)
 
 
         results = p.rayTestBatch(ray_froms, ray_tops)
+
        
         if render:
             hitRayColor = [0, 1, 0]

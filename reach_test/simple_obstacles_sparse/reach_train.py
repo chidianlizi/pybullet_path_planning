@@ -86,7 +86,7 @@ if __name__=='__main__':
 
           # # Use deterministic actions for evaluation
           eval_callback = EvalCallback(eval_env, best_model_save_path='./models/best_reach/',
-                             log_path='./models/best_myreach/', eval_freq=10000,
+                             log_path='./models/best_reach/', eval_freq=10000,
                              deterministic=True, render=False)
           
           # Save a checkpoint every ? steps

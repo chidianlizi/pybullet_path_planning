@@ -258,53 +258,66 @@ class MySimpleReachEnv(gym.Env):
         rand = np.float32(np.random.rand(3,))
         target_x = self.x_low_obs+rand[0]*(self.x_high_obs-self.x_low_obs)
         target_y = self.y_low_obs+rand[1]*(self.y_high_obs-self.y_low_obs)
-        target_z = self.z_low_obs+rand[2]*(self.z_high_obs-self.z_low_obs)
+        target_z = self.z_low_obs+rand[1]*(self.z_high_obs-self.z_low_obs)
         target_position = [target_x, target_y, target_z]
         # print (target_position)
         show_target(target_position)
         obsts = []
         obst_x = target_x
-        obst_y = target_y-0.1
-        obst_z = target_z
-        obst_id = p.createMultiBody(
-                        baseMass=0,
-                        baseVisualShapeIndex=self._create_visual_box([0.1,0.002,0.1]),
-                        baseCollisionShapeIndex=self._create_collision_box([0.1,0.002,0.1]),
-                        basePosition=[obst_x, obst_y, obst_z]
-                    )
-        obsts.append(obst_id)
-        obst_x = target_x
-        obst_y = target_y+0.1
-        obst_z = target_z
-        obst_id = p.createMultiBody(
-                        baseMass=0,
-                        baseVisualShapeIndex=self._create_visual_box([0.1,0.002,0.1]),
-                        baseCollisionShapeIndex=self._create_collision_box([0.1,0.002,0.1]),
-                        basePosition=[obst_x, obst_y, obst_z]
-                    )
-        obsts.append(obst_id)
-        obst_x = target_x-0.1
         obst_y = target_y
-        obst_z = target_z
+        obst_z = target_z-0.0205
         obst_id = p.createMultiBody(
                         baseMass=0,
-                        baseVisualShapeIndex=self._create_visual_box([0.002,0.1,0.1]),
-                        baseCollisionShapeIndex=self._create_collision_box([0.002,0.01,0.1]),
+                        baseVisualShapeIndex=self._create_visual_box([0.1,0.1,0.001]),
+                        baseCollisionShapeIndex=self._create_collision_box([0.1,0.1,0.001]),
                         basePosition=[obst_x, obst_y, obst_z]
                     )
         obsts.append(obst_id)
-        obst_x = target_x+0.1
-        obst_y = target_y
-        obst_z = target_z
-        obst_id = p.createMultiBody(
-                        baseMass=0,
-                        baseVisualShapeIndex=self._create_visual_box([0.002,0.1,0.1]),
-                        baseCollisionShapeIndex=self._create_collision_box([0.002,0.01,0.1]),
-                        basePosition=[obst_x, obst_y, obst_z]
-                    )
-        obsts.append(obst_id)
-        
-        return target_position, obsts                     
+        if np.random.random()<0.5:        
+            obst_x = target_x
+            obst_y = target_y-0.1
+            obst_z = target_z+0.01
+            obst_id = p.createMultiBody(
+                            baseMass=0,
+                            baseVisualShapeIndex=self._create_visual_box([0.1,0.002,0.03]),
+                            baseCollisionShapeIndex=self._create_collision_box([0.1,0.002,0.03]),
+                            basePosition=[obst_x, obst_y, obst_z]
+                        )
+            obsts.append(obst_id)
+        if np.random.random()<0.5: 
+            obst_x = target_x
+            obst_y = target_y+0.1
+            obst_z = target_z+0.01
+            obst_id = p.createMultiBody(
+                            baseMass=0,
+                            baseVisualShapeIndex=self._create_visual_box([0.1,0.002,0.03]),
+                            baseCollisionShapeIndex=self._create_collision_box([0.1,0.002,0.03]),
+                            basePosition=[obst_x, obst_y, obst_z]
+                        )
+            obsts.append(obst_id)
+        if np.random.random()<0.5: 
+            obst_x = target_x-0.1
+            obst_y = target_y
+            obst_z = target_z+0.01
+            obst_id = p.createMultiBody(
+                            baseMass=0,
+                            baseVisualShapeIndex=self._create_visual_box([0.002,0.1,0.03]),
+                            baseCollisionShapeIndex=self._create_collision_box([0.002,0.01,0.03]),
+                            basePosition=[obst_x, obst_y, obst_z]
+                        )
+            obsts.append(obst_id)
+        if np.random.random()<0.5: 
+            obst_x = target_x+0.1
+            obst_y = target_y
+            obst_z = target_z+0.01
+            obst_id = p.createMultiBody(
+                            baseMass=0,
+                            baseVisualShapeIndex=self._create_visual_box([0.002,0.1,0.03]),
+                            baseCollisionShapeIndex=self._create_collision_box([0.002,0.01,0.03]),
+                            basePosition=[obst_x, obst_y, obst_z]
+                        )
+            obsts.append(obst_id)
+        return target_position, obsts                       
     
     
     
