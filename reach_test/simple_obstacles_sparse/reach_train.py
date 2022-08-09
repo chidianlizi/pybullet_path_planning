@@ -76,13 +76,14 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
 
 if __name__=='__main__':
      if IS_TRAIN:
+                    
+          # Separate evaluation env
+          eval_env = MySimpleReachEnv(is_render=False, is_good_view=False, is_train=False)
           # load env
           env = MySimpleReachEnv(is_render=False, is_good_view=False, is_train=True)
           # Stops training when the model reaches the maximum number of episodes
           callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=1e8, verbose=1)
-          
-          # Separate evaluation env
-          eval_env = MySimpleReachEnv(is_render=False, is_good_view=False, is_train=False)
+
 
           # # Use deterministic actions for evaluation
           eval_callback = EvalCallback(eval_env, best_model_save_path='./models/best_reach/',

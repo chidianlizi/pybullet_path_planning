@@ -14,16 +14,17 @@ from typing import Callable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument('is_train', type=bool, default=True, help='set true for training, false for testing')
-args = parser.parse_args()
+# import argparse
+# parser = argparse.ArgumentParser()
+# parser.add_argument('is_train', type=bool, default=None, help='set true for training, false for testing')
+# args = parser.parse_args()
 
 CURRENT_PATH = os.path.abspath(__file__)
 sys.path.insert(0,os.path.dirname(CURRENT_PATH))
 from reach_env import MySimpleReachEnv
 # change here
-IS_TRAIN = args.is_train
+IS_TRAIN = True
+# print (args)
 
 def make_env(env_id: str, rank: int, seed: int = 0) -> Callable:
     """
@@ -77,25 +78,23 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
 if __name__=='__main__':
      if IS_TRAIN:
           # Separate evaluation env
-          eval_env = MySimpleReachEnv(is_render=False, is_good_view=False, is_train=False)
-          
+          # eval_env = MySimpleReachEnv(is_render=False, is_good_view=False, is_train=False)
           # load env
           env = MySimpleReachEnv(is_render=False, is_good_view=False, is_train=True)
           # Stops training when the model reaches the maximum number of episodes
           callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=1e8, verbose=1)
-          
+
           # # Use deterministic actions for evaluation
-          eval_callback = EvalCallback(eval_env, best_model_save_path='./models/best_reach/',
-                             log_path='./models/best_reach/', eval_freq=10000,
-                             deterministic=True, render=False)
+          # eval_callback = EvalCallback(eval_env, best_model_save_path='./models/best_reach/',
+          #                    log_path='./models/best_reach/', eval_freq=10000,
+          #                    deterministic=True, render=False)
           
           # Save a checkpoint every ? steps
           checkpoint_callback = CheckpointCallback(save_freq=51200, save_path='./models/reach_ppo_ckp_logs/',
                                              name_prefix='reach')
           # Create the callback list
-          callback = CallbackList([checkpoint_callback, callback_max_episodes, eval_callback])
-          policy_kwargs = dict(features_extractor_class=CustomCombinedExtractor)
-          model = PPO("MultiInputPolicy", env, batch_size=64, policy_kwargs=policy_kwargs, verbose=1, tensorboard_log='./models/reach_ppo_tf_logs/')
+          callback = CallbackList([checkpoint_callback, callback_max_episodes])
+          model = PPO("MultiInputPolicy", env, batch_size=256, verbose=1, tensorboard_log='./models/reach_ppo_tf_logs/')
           # model = PPO.load('./ppo_ckp_logs/reach_?????_steps', env=env)
           model.learn(
                total_timesteps=1e10,
@@ -106,7 +105,7 @@ if __name__=='__main__':
           # load env
           env = MySimpleReachEnv(is_render=True, is_good_view=True, is_train=False)
           # load drl model
-          model = PPO.load('./models/best_reach/best_model', env=env)
+          model = PPO.load('./models/reach_ppo_ckp_logs/reach_17459200_steps', env=env)
 
           while True:
                done = False
